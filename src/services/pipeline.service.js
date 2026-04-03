@@ -138,4 +138,17 @@ async function retryStage(episodeId, stageName) {
   return { jobId: job.id, stage: normalizedStage, attempt: stage.attempt + 1 };
 }
 
-module.exports = { createEpisode, getEpisode, getEpisodeStatus, retryStage };
+/**
+ * Delete an episode and all related data.
+ * FK cascade handles concepts, questions, flashcards, pipeline_stages.
+ */
+async function deleteEpisode(episodeId) {
+  const [episode] = await db.select({ id: episodes.id }).from(episodes).where(eq(episodes.id, episodeId));
+  if (!episode) return null;
+
+  await db.delete(episodes).where(eq(episodes.id, episodeId));
+  console.log(`[Pipeline] Deleted episode ${episodeId}`);
+  return { id: episodeId };
+}
+
+module.exports = { createEpisode, getEpisode, getEpisodeStatus, retryStage, deleteEpisode };

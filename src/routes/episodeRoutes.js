@@ -2,7 +2,7 @@ const express = require('express');
 const multer = require('multer');
 const router = express.Router();
 const { extractTextFromPDF, cleanExtractedText, validateEducationalContent } = require('../utils/pdfProcessor');
-const { createEpisode, getEpisode, getEpisodeStatus, retryStage } = require('../services/pipeline.service');
+const { createEpisode, getEpisode, getEpisodeStatus, retryStage, deleteEpisode } = require('../services/pipeline.service');
 const { generateIndianTTS, isIndianVoiceSupported } = require('../utils/indianTTSConfig');
 const { TextToSpeechClient } = require('@google-cloud/text-to-speech');
 const axios = require('axios');
@@ -284,6 +284,24 @@ router.post('/episodes/:id/retry/:stage', async (req, res) => {
     const status = err.message.includes('not found') ? 404 :
                    err.message.includes('not "failed"') ? 400 : 500;
     res.status(status).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * DELETE /api/episodes/:id
+ * Delete an episode and all related data (concepts, questions, flashcards, stages).
+ * Cascade delete handles child rows automatically.
+ */
+router.delete('/episodes/:id', async (req, res) => {
+  try {
+    const result = await deleteEpisode(req.params.id);
+    if (!result) {
+      return res.status(404).json({ success: false, error: 'Episode not found' });
+    }
+    res.json({ success: true, data: { message: 'Episode deleted', id: req.params.id } });
+  } catch (err) {
+    console.error('[EpisodeRoutes] DELETE /episodes/:id error:', err);
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 

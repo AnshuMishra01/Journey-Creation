@@ -293,6 +293,7 @@
       </div>
       <div style="display:flex;align-items:center;gap:8px;">
         <span class="status-badge" id="epStatus"></span>
+        <button class="new-episode-btn" onclick="deleteAndReset()" style="color:var(--coral);border-color:var(--coral);">Delete</button>
         <button class="new-episode-btn" onclick="resetUI()">+ New</button>
       </div>
     </div>
@@ -473,6 +474,19 @@
     document.getElementById('pipelineSection').classList.add('active');
     document.getElementById('epTitle').textContent = title;
     document.getElementById('epId').textContent = id;
+  }
+
+  async function deleteAndReset() {
+    if (!currentEpisodeId) return resetUI();
+    if (!confirm('Delete this episode and all its data? This cannot be undone.')) return;
+    try {
+      const res = await fetch(`/api/episodes/${currentEpisodeId}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error);
+    } catch (err) {
+      alert('Delete failed: ' + err.message);
+    }
+    resetUI();
   }
 
   function resetUI() {
