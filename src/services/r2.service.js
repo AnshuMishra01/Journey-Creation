@@ -21,28 +21,49 @@ async function uploadAudio(episodeId, filePath, filename = 'merged.mp3') {
     return { key: null, url: null };
   }
 
+  // Verify file exists
+  if (!fs.existsSync(filePath)) {
+    console.error(`[R2] File not found: ${filePath}`);
+    throw new Error(`Audio file not found at ${filePath}`);
+  }
+
   const key = `episodes/${episodeId}/${filename}`;
   const buffer = fs.readFileSync(filePath);
+  const uploadUrl = `${CF_API_BASE}/${key}`;
 
-  const response = await axios.put(
-    `${CF_API_BASE}/${key}`,
-    buffer,
-    {
+  console.log(`[R2] Uploading ${key} (${(buffer.length / 1024 / 1024).toFixed(2)} MB) to ${uploadUrl}`);
+
+  let response;
+  try {
+    response = await axios.put(uploadUrl, buffer, {
       headers: {
         'Authorization': `Bearer ${R2_WRITE_TOKEN}`,
         'Content-Type': 'audio/mpeg',
       },
-      maxBodyLength: 100 * 1024 * 1024, // 100MB max
+      maxBodyLength: 100 * 1024 * 1024,
       timeout: 120000,
-    }
-  );
+      validateStatus: () => true, // Don't throw on non-2xx
+    });
+  } catch (netErr) {
+    console.error(`[R2] Network error:`, netErr.message);
+    throw new Error(`R2 upload network error: ${netErr.message}`);
+  }
 
-  if (!response.data?.success) {
-    throw new Error(`R2 upload failed: ${JSON.stringify(response.data?.errors)}`);
+  console.log(`[R2] Response status: ${response.status}`);
+
+  if (response.status >= 400) {
+    const errBody = typeof response.data === 'string' ? response.data : JSON.stringify(response.data);
+    console.error(`[R2] Upload failed (${response.status}):`, errBody.substring(0, 500));
+    throw new Error(`R2 upload failed (${response.status}): ${errBody.substring(0, 200)}`);
+  }
+
+  if (response.data && response.data.success === false) {
+    console.error(`[R2] Upload returned errors:`, JSON.stringify(response.data.errors));
+    throw new Error(`R2 upload failed: ${JSON.stringify(response.data.errors)}`);
   }
 
   const url = R2_PUBLIC_URL ? `${R2_PUBLIC_URL}/${key}` : key;
-  console.log(`[R2] Uploaded ${key} (${(buffer.length / 1024 / 1024).toFixed(2)} MB) → ${url}`);
+  console.log(`[R2] Uploaded successfully → ${url}`);
   return { key, url };
 }
 
