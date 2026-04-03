@@ -35,13 +35,13 @@ if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
   } catch (error) {
     console.error('[Google TTS] ❌ Service account initialization failed:', error.message);
   }
-} else if (process.env.GOOGLE_TTS_CREDENTIALS_JSON) {
+} else if (process.env.GOOGLE_TTS_CREDENTIALS_B64) {
   try {
-    const creds = JSON.parse(process.env.GOOGLE_TTS_CREDENTIALS_JSON);
+    const creds = JSON.parse(Buffer.from(process.env.GOOGLE_TTS_CREDENTIALS_B64, 'base64').toString('utf8'));
     googleTTSClient = new TextToSpeechClient({ credentials: creds });
-    console.log('[Google TTS] ✅ Client initialized with env var JSON credentials');
+    console.log('[Google TTS] ✅ Client initialized with base64 credentials');
   } catch (error) {
-    console.error('[Google TTS] ❌ JSON credentials init failed:', error.message);
+    console.error('[Google TTS] ❌ Base64 credentials init failed:', error.message);
   }
 } else {
   console.log('[Google TTS] ⚠️  No Google TTS credentials found (set GOOGLE_APPLICATION_CREDENTIALS or GOOGLE_TTS_CREDENTIALS_JSON)');

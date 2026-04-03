@@ -13,8 +13,8 @@ const fs = require('fs');
 let previewTTSClient = null;
 if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
   try { previewTTSClient = new TextToSpeechClient(); } catch {}
-} else if (process.env.GOOGLE_TTS_CREDENTIALS_JSON) {
-  try { previewTTSClient = new TextToSpeechClient({ credentials: JSON.parse(process.env.GOOGLE_TTS_CREDENTIALS_JSON) }); } catch {}
+} else if (process.env.GOOGLE_TTS_CREDENTIALS_B64) {
+  try { previewTTSClient = new TextToSpeechClient({ credentials: JSON.parse(Buffer.from(process.env.GOOGLE_TTS_CREDENTIALS_B64, 'base64').toString('utf8')) }); } catch {}
 }
 
 // Available voice options for the frontend

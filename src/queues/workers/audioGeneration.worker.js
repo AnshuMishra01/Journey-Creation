@@ -22,13 +22,13 @@ if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
   } catch (err) {
     console.error('[AudioWorker] Google TTS file init failed:', err.message);
   }
-} else if (process.env.GOOGLE_TTS_CREDENTIALS_JSON) {
+} else if (process.env.GOOGLE_TTS_CREDENTIALS_B64) {
   try {
-    const creds = JSON.parse(process.env.GOOGLE_TTS_CREDENTIALS_JSON);
+    const creds = JSON.parse(Buffer.from(process.env.GOOGLE_TTS_CREDENTIALS_B64, 'base64').toString('utf8'));
     googleTTSClient = new TextToSpeechClient({ credentials: creds });
-    console.log('[AudioWorker] Google TTS initialized via env var JSON');
+    console.log('[AudioWorker] Google TTS initialized via base64 credentials');
   } catch (err) {
-    console.error('[AudioWorker] Google TTS JSON init failed:', err.message);
+    console.error('[AudioWorker] Google TTS base64 init failed:', err.message);
   }
 }
 
