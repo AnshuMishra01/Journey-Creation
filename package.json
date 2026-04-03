@@ -4,18 +4,35 @@
   "description": "Automate ChatGPT with Playwright, parallel windows, and prompt management UI.",
   "main": "index.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "workers": "node worker.js",
+    "dev": "ENABLE_WORKERS=true node server.js",
+    "db:generate": "npx drizzle-kit generate",
+    "db:migrate": "node src/db/migrate.js",
+    "db:studio": "npx drizzle-kit studio"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.967.0",
+    "@aws-sdk/s3-request-presigner": "^3.967.0",
     "@elevenlabs/elevenlabs-js": "^2.7.0",
     "@google-cloud/text-to-speech": "^5.0.0",
+    "@neondatabase/serverless": "^0.10.4",
     "@supabase/supabase-js": "^2.53.0",
     "axios": "^1.11.0",
     "body-parser": "^1.20.2",
+    "bullmq": "^5.73.0",
     "dotenv": "^17.2.1",
+    "drizzle-orm": "^0.45.2",
     "express": "^4.18.2",
+    "ioredis": "^5.10.1",
+    "jsonrepair": "^3.9.1",
     "multer": "^1.4.5-lts.1",
     "pdf-parse": "^1.1.1",
-    "playwright": "^1.44.0"
+    "playwright": "^1.44.0",
+    "postgres": "^3.4.8",
+    "uuid": "^13.0.0"
+  },
+  "devDependencies": {
+    "drizzle-kit": "^0.31.10"
   }
 }

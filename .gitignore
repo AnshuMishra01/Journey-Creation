@@ -1,0 +1,10 @@
+node_modules
+.env
+hf_backend/.env
+hf_backend/venv
+google-tts-credentials.json
+*.json.bak
+outputs/
+final/
+merged.mp3
+src/db/migrations/

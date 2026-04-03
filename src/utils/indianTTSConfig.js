@@ -65,6 +65,22 @@ const INDIAN_VOICES = {
     recommended: true
   },
   
+  // English Chirp 3: HD voices (Preview) - Indian English
+  'en-IN-Chirp3-HD-Puck': {
+    name: 'en-IN-Chirp3-HD-Puck',
+    gender: 'male',
+    language: 'en-IN',
+    description: 'Indian English Male (Chirp 3: HD)',
+    recommended: true
+  },
+  'en-IN-Chirp3-HD-Sulafat': {
+    name: 'en-IN-Chirp3-HD-Sulafat',
+    gender: 'female',
+    language: 'en-IN',
+    description: 'Indian English Female (Chirp 3: HD)',
+    recommended: true
+  },
+  
   // Hindi voices
   'hi-IN-Standard-A': {
     name: 'hi-IN-Standard-A',
@@ -123,6 +139,22 @@ const INDIAN_VOICES = {
     language: 'hi-IN',
     description: 'Hindi Male Alt (WaveNet - High Quality)',
     recommended: false
+  },
+
+  // Hindi Chirp 3: HD voices (Preview)
+  'hi-IN-Chirp3-HD-Achird': {
+    name: 'hi-IN-Chirp3-HD-Achird',
+    gender: 'male',
+    language: 'hi-IN',
+    description: 'Hindi Male (Chirp 3: HD)',
+    recommended: true
+  },
+  'hi-IN-Chirp3-HD-Achernar': {
+    name: 'hi-IN-Chirp3-HD-Achernar',
+    gender: 'female',
+    language: 'hi-IN',
+    description: 'Hindi Female (Chirp 3: HD)',
+    recommended: true
   }
 };
 
@@ -146,7 +178,7 @@ function getEducationalTTSConfig(voiceName) {
     audioConfig: {
       audioEncoding: 'MP3',
       pitch: 0, // Natural pitch
-      speakingRate: 0.9, // Slightly slower for educational clarity
+      speakingRate: 1.0, // Normal speaking speed
       volumeGainDb: 0,
       effectsProfileId: ['telephony-class-application'] // Clear audio profile
     }
@@ -290,19 +322,9 @@ function isIndianVoiceSupported(voiceName) {
 function getRecommendedVoicePairs() {
   return [
     {
-      speaker1: 'en-IN-PrabhatNeural',
-      speaker2: 'en-IN-NeerjaNeural',
-      description: 'Male + Female English with Indian accent (Recommended)'
-    },
-    {
-      speaker1: 'en-IN-NeerjaNeural', 
-      speaker2: 'hi-IN-MadhurNeural',
-      description: 'Female English + Male Hindi'
-    },
-    {
-      speaker1: 'hi-IN-SwaraNeural',
-      speaker2: 'en-IN-PrabhatNeural', 
-      description: 'Female Hindi + Male English'
+      speaker1: 'hi-IN-Chirp3-HD-Achird',
+      speaker2: 'hi-IN-Chirp3-HD-Achernar',
+      description: 'Male + Female Hindi (Chirp 3: HD)'
     }
   ];
 }

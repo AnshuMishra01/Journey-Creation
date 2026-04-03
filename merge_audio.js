@@ -80,6 +80,7 @@ if (require.main === module) {
 }
 
 module.exports = {
+  mergeAudiosInOrder,
   mergeAllOutputs,
   getMergedAudioFiles: function(baseDir = path.join(__dirname, 'outputs')) {
     const outputDirs = fs.readdirSync(baseDir)

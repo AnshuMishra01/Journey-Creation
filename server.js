@@ -3,6 +3,7 @@ const bodyParser = require('body-parser');
 const path = require('path');
 const { runAutomation } = require('./playwright-automation');
 const educationalRoutes = require('./src/routes/educationalRoutes');
+const episodeRoutes = require('./src/routes/episodeRoutes');
 
 const app = express();
 const PORT = 3000;
@@ -11,8 +12,16 @@ app.use(bodyParser.json({ limit: '50mb' }));
 app.use(bodyParser.urlencoded({ extended: true, limit: '50mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Educational routes
+// Educational routes (existing)
 app.use('/api', educationalRoutes);
+
+// Episode pipeline routes (new)
+app.use('/api', episodeRoutes);
+
+// Start workers in dev mode
+if (process.env.ENABLE_WORKERS === 'true') {
+  require('./worker');
+}
 
 // API to start automation
 app.post('/api/start', async (req, res) => {

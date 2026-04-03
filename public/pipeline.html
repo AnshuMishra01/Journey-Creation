@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Episode Pipeline — Wivme</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --cream: #F5F1EB; --sand: #E8E2D8; --warm-white: #FDFCF9;
+      --charcoal: #1A1A1E; --dark: #111113;
+      --text: #1A1A1E; --text-dim: #4D4D52; --text-muted: #8C8C91;
+      --violet: #6346E6; --coral: #E8573D; --sage: #3B7D5E; --amber: #D4940A; --sky: #2D8FCA;
+      --violet-soft: #E5DFFC; --coral-soft: #FCEAE5; --sage-soft: #E0F0E7;
+      --amber-soft: #FFF4D6; --sky-soft: #E0F1FC;
+      --border: rgba(26,26,30,0.1); --radius: 12px;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Inter', -apple-system, sans-serif; background: var(--cream); color: var(--text); min-height: 100vh; }
+
+    .container { max-width: 780px; margin: 0 auto; padding: 32px 20px; }
+
+    h1 { font-size: 26px; font-weight: 700; color: var(--charcoal); letter-spacing: -0.5px; }
+    .subtitle { color: var(--text-muted); font-size: 14px; margin: 4px 0 28px; }
+
+    /* Cards */
+    .card {
+      background: var(--warm-white); border: 1px solid var(--border); border-radius: var(--radius);
+      padding: 28px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    }
+    .card h2 { font-size: 17px; font-weight: 700; color: var(--charcoal); margin-bottom: 16px; }
+
+    /* Form */
+    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 16px; }
+    .form-group { display: flex; flex-direction: column; gap: 5px; }
+    .form-group.full { grid-column: 1 / -1; }
+    label { font-size: 12px; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+    input, select {
+      background: var(--cream); border: 1px solid var(--sand); border-radius: 8px;
+      padding: 9px 12px; color: var(--text); font-size: 14px; font-family: inherit; outline: none;
+      width: 100%;
+    }
+    input:focus, select:focus { border-color: var(--violet); box-shadow: 0 0 0 3px var(--violet-soft); }
+
+    .drop-zone {
+      border: 2px dashed var(--sand); border-radius: var(--radius); padding: 32px;
+      text-align: center; cursor: pointer; transition: all 0.2s; margin-bottom: 16px;
+    }
+    .drop-zone:hover, .drop-zone.dragover { border-color: var(--violet); background: var(--violet-soft); }
+    .drop-zone.has-file { border-color: var(--sage); border-style: solid; background: var(--sage-soft); }
+    .drop-zone p { color: var(--text-muted); font-size: 14px; }
+    .drop-zone .filename { color: var(--sage); font-weight: 600; margin-top: 6px; }
+
+    .btn {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 10px 28px; border-radius: 8px; font-size: 14px; font-weight: 600;
+      cursor: pointer; border: none; font-family: inherit; transition: all 0.2s;
+    }
+    .btn-primary { background: var(--violet); color: #fff; }
+    .btn-primary:hover { background: #5338c9; box-shadow: 0 4px 12px rgba(99,70,230,0.3); }
+    .btn-primary:disabled { background: var(--sand); color: var(--text-muted); cursor: not-allowed; box-shadow: none; }
+    .btn-retry { background: var(--coral); color: #fff; font-size: 11px; padding: 4px 10px; border-radius: 6px; border: none; cursor: pointer; font-family: inherit; }
+    .btn-retry:hover { background: #d04530; }
+
+    /* Voice */
+    .voice-row { display: flex; align-items: center; gap: 6px; }
+    .voice-row select { flex: 1; min-width: 0; }
+    .btn-preview {
+      background: var(--warm-white); border: 1px solid var(--sand); color: var(--text-muted);
+      width: 34px; height: 34px; border-radius: 8px; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 14px; transition: all 0.15s; flex-shrink: 0;
+    }
+    .btn-preview:hover { border-color: var(--violet); color: var(--violet); }
+    .btn-preview.loading { opacity: 0.4; cursor: wait; }
+
+    /* Pipeline */
+    .pipeline-section { display: none; }
+    .pipeline-section.active { display: block; }
+
+    .pipeline-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 8px; }
+    .episode-title { font-size: 20px; font-weight: 700; color: var(--charcoal); }
+    .episode-id { font-size: 11px; color: var(--text-muted); font-family: monospace; }
+
+    .status-badge {
+      display: inline-flex; align-items: center; padding: 3px 10px; border-radius: 20px; font-size: 12px; font-weight: 600;
+    }
+    .status-pending { background: var(--sand); color: var(--text-muted); }
+    .status-running { background: var(--violet-soft); color: var(--violet); }
+    .status-completed { background: var(--sage-soft); color: var(--sage); }
+    .status-failed { background: var(--coral-soft); color: var(--coral); }
+    .status-partial { background: var(--amber-soft); color: var(--amber); }
+
+    /* DAG */
+    .pipeline-dag { padding: 0; }
+    .dag-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+    .dag-row:last-child { margin-bottom: 0; }
+    .dag-connector { width: 24px; display: flex; justify-content: center; color: var(--sand); font-size: 16px; }
+    .dag-parallel { display: flex; gap: 8px; flex: 1; flex-wrap: wrap; }
+
+    .stage-card {
+      flex: 1; min-width: 140px; background: var(--warm-white); border: 1px solid var(--border); border-radius: 10px;
+      padding: 10px 14px; display: flex; justify-content: space-between; align-items: center;
+    }
+    .stage-card.running { border-color: var(--violet); background: var(--violet-soft); }
+    .stage-card.completed { border-color: var(--sage); background: var(--sage-soft); }
+    .stage-card.failed { border-color: var(--coral); background: var(--coral-soft); }
+
+    .stage-name { font-size: 12px; font-weight: 600; color: var(--charcoal); }
+    .stage-info { font-size: 10px; color: var(--text-muted); margin-top: 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 140px; }
+    .stage-right { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+
+    .spinner { width: 14px; height: 14px; border: 2px solid var(--sand); border-top-color: var(--violet); border-radius: 50%; animation: spin 0.8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .check { color: var(--sage); font-size: 15px; }
+    .cross { color: var(--coral); font-size: 15px; }
+
+    /* Tabs */
+    .results-section { background: var(--warm-white); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 20px; overflow: hidden; }
+    .tabs { display: flex; border-bottom: 1px solid var(--border); overflow-x: auto; }
+    .tab {
+      padding: 10px 16px; font-size: 13px; font-weight: 600; cursor: pointer;
+      color: var(--text-muted); border-bottom: 2px solid transparent; white-space: nowrap; transition: all 0.15s;
+    }
+    .tab:hover { color: var(--text); }
+    .tab.active { color: var(--violet); border-bottom-color: var(--violet); }
+    .tab .count { background: var(--violet-soft); color: var(--violet); font-size: 10px; padding: 1px 6px; border-radius: 10px; margin-left: 4px; }
+    .tab-content { display: none; padding: 16px; max-height: 500px; overflow-y: auto; }
+    .tab-content.active { display: block; }
+
+    /* Content cards */
+    .concept-card { background: var(--cream); border: 1px solid var(--border); border-radius: 10px; padding: 14px; margin-bottom: 10px; }
+    .concept-card h3 { font-size: 14px; font-weight: 600; margin-bottom: 4px; color: var(--charcoal); }
+    .concept-card p { font-size: 13px; color: var(--text-dim); line-height: 1.5; }
+    .key-terms { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+    .term-badge { background: var(--violet-soft); color: var(--violet); font-size: 11px; padding: 2px 8px; border-radius: 10px; }
+
+    .question-card { background: var(--cream); border: 1px solid var(--border); border-radius: 10px; padding: 14px; margin-bottom: 10px; }
+    .question-card .q-text { font-size: 14px; font-weight: 600; margin-bottom: 8px; color: var(--charcoal); }
+    .question-card .options { list-style: none; }
+    .question-card .options li { padding: 5px 10px; margin-bottom: 3px; border-radius: 6px; font-size: 13px; color: var(--text-dim); }
+    .question-card .options li.correct { background: var(--sage-soft); color: var(--sage); font-weight: 600; }
+    .question-card .explanation { margin-top: 6px; font-size: 12px; color: var(--text-muted); padding-top: 6px; border-top: 1px solid var(--border); }
+    .difficulty-badge { font-size: 10px; padding: 1px 7px; border-radius: 10px; font-weight: 600; }
+    .diff-easy { background: var(--sage-soft); color: var(--sage); }
+    .diff-medium { background: var(--amber-soft); color: var(--amber); }
+    .diff-hard { background: var(--coral-soft); color: var(--coral); }
+
+    .flashcard { background: var(--cream); border: 1px solid var(--border); border-radius: 10px; padding: 14px; margin-bottom: 10px; cursor: pointer; transition: all 0.15s; }
+    .flashcard:hover { border-color: var(--violet); }
+    .flashcard .front { font-size: 14px; font-weight: 600; color: var(--charcoal); }
+    .flashcard .back { font-size: 13px; color: var(--text-dim); margin-top: 6px; padding-top: 6px; border-top: 1px dashed var(--sand); display: none; line-height: 1.5; }
+    .flashcard.revealed .back { display: block; }
+    .flashcard .flip-hint { font-size: 11px; color: var(--text-muted); margin-top: 4px; }
+    .flashcard.revealed .flip-hint { display: none; }
+
+    .audio-section { text-align: center; padding: 16px; }
+    .audio-section audio { width: 100%; max-width: 480px; margin-top: 10px; }
+
+    .script-preview { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 13px; line-height: 1.7; white-space: pre-wrap; color: var(--text-dim); }
+    .script-preview .speaker1 { color: var(--violet); }
+    .script-preview .speaker2 { color: var(--coral); }
+
+    .empty-state { text-align: center; padding: 32px; color: var(--text-muted); font-size: 14px; }
+
+    .new-episode-btn {
+      background: var(--warm-white); border: 1px solid var(--sand); color: var(--text-dim);
+      padding: 6px 14px; border-radius: 8px; cursor: pointer; font-size: 12px; font-family: inherit; font-weight: 600;
+    }
+    .new-episode-btn:hover { border-color: var(--violet); color: var(--violet); }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <h1>Journey Creation</h1>
+  <p class="subtitle">Upload a PDF chapter to generate concepts, questions, flashcards, and audio episodes</p>
+
+  <!-- Upload Section -->
+  <div id="uploadSection" class="card">
+    <h2>Create New Episode</h2>
+
+    <div class="drop-zone" id="dropZone">
+      <p>Drop your PDF here or click to select</p>
+      <div class="filename" id="fileName"></div>
+    </div>
+    <input type="file" id="pdfInput" accept=".pdf" hidden>
+
+    <div class="form-grid">
+      <div class="form-group">
+        <label>Episode Title</label>
+        <input type="text" id="titleInput" value="Chapter Revision" placeholder="e.g. Chapter 5 - Photosynthesis">
+      </div>
+      <div class="form-group">
+        <label>Grade Band</label>
+        <select id="gradeInput">
+          <option value="6-8">Grade 6-8</option>
+          <option value="9-10" selected>Grade 9-10</option>
+          <option value="11-12">Grade 11-12</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Duration (minutes)</label>
+        <input type="number" id="durationInput" value="10" min="3" max="30">
+      </div>
+      <div class="form-group">
+        <label>Speaker 1 Name</label>
+        <input type="text" id="speaker1Input" value="Alex">
+      </div>
+      <div class="form-group">
+        <label>Speaker 2 Name</label>
+        <input type="text" id="speaker2Input" value="Sam">
+      </div>
+      <div class="form-group full">
+        <label>TTS Provider</label>
+        <select id="ttsProviderInput" onchange="toggleVoiceOptions()">
+          <option value="google" selected>Google Cloud TTS (Indian English)</option>
+          <option value="elevenlabs">ElevenLabs (Premium)</option>
+        </select>
+      </div>
+    </div>
+
+    <div id="googleVoiceSection">
+      <div class="form-grid">
+        <div class="form-group">
+          <label>Speaker 1 Voice</label>
+          <div class="voice-row">
+            <select id="speaker1VoiceInput">
+              <option value="en-IN-Chirp3-HD-Puck" selected>Puck (Male, Chirp HD)</option>
+              <option value="en-IN-Chirp3-HD-Sulafat">Sulafat (Female, Chirp HD)</option>
+              <option value="en-IN-Wavenet-A">Voice A (Female, WaveNet)</option>
+              <option value="en-IN-Wavenet-B">Voice B (Male, WaveNet)</option>
+              <option value="en-IN-Wavenet-C">Voice C (Male, WaveNet)</option>
+              <option value="en-IN-Wavenet-D">Voice D (Female, WaveNet)</option>
+              <option value="en-IN-Standard-A">Voice A (Female, Standard)</option>
+              <option value="en-IN-Standard-B">Voice B (Male, Standard)</option>
+            </select>
+            <button class="btn-preview" onclick="previewVoice('google', this.parentElement.querySelector('select').value, this)" title="Preview voice">&#9654;</button>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Speaker 2 Voice</label>
+          <div class="voice-row">
+            <select id="speaker2VoiceInput">
+              <option value="en-IN-Chirp3-HD-Puck">Puck (Male, Chirp HD)</option>
+              <option value="en-IN-Chirp3-HD-Sulafat" selected>Sulafat (Female, Chirp HD)</option>
+              <option value="en-IN-Wavenet-A">Voice A (Female, WaveNet)</option>
+              <option value="en-IN-Wavenet-B">Voice B (Male, WaveNet)</option>
+              <option value="en-IN-Wavenet-C">Voice C (Male, WaveNet)</option>
+              <option value="en-IN-Wavenet-D">Voice D (Female, WaveNet)</option>
+              <option value="en-IN-Standard-A">Voice A (Female, Standard)</option>
+              <option value="en-IN-Standard-B">Voice B (Male, Standard)</option>
+            </select>
+            <button class="btn-preview" onclick="previewVoice('google', this.parentElement.querySelector('select').value, this)" title="Preview voice">&#9654;</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="elevenlabsVoiceSection" style="display:none">
+      <div class="form-grid">
+        <div class="form-group">
+          <label>Speaker 1 Voice</label>
+          <div class="voice-row">
+            <select id="el1VoiceInput"><option value="">Loading voices...</option></select>
+            <button class="btn-preview" onclick="previewVoice('elevenlabs', this.parentElement.querySelector('select').value, this)" title="Preview voice">&#9654;</button>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Speaker 2 Voice</label>
+          <div class="voice-row">
+            <select id="el2VoiceInput"><option value="">Loading voices...</option></select>
+            <button class="btn-preview" onclick="previewVoice('elevenlabs', this.parentElement.querySelector('select').value, this)" title="Preview voice">&#9654;</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div style="margin-top:8px">
+      <button class="btn btn-primary" id="startBtn" disabled>
+        <span id="btnText">Select a PDF to start</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Pipeline Status -->
+  <div id="pipelineSection" class="pipeline-section">
+    <div class="pipeline-header">
+      <div>
+        <div class="episode-title" id="epTitle"></div>
+        <div class="episode-id" id="epId"></div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span class="status-badge" id="epStatus"></span>
+        <button class="new-episode-btn" onclick="resetUI()">+ New</button>
+      </div>
+    </div>
+
+    <div class="card pipeline-dag">
+      <div class="dag-row">
+        <div class="stage-card" id="stage-concept_extraction">
+          <div><div class="stage-name">1. Concept Extraction</div><div class="stage-info" id="stage-info-concept_extraction">Pending</div></div>
+          <div class="stage-right" id="stage-icon-concept_extraction"></div>
+        </div>
+      </div>
+      <div class="dag-row"><div class="dag-connector">|</div></div>
+      <div class="dag-row">
+        <div class="dag-parallel">
+          <div class="stage-card" id="stage-script_generation">
+            <div><div class="stage-name">2a. Script</div><div class="stage-info" id="stage-info-script_generation">Pending</div></div>
+            <div class="stage-right" id="stage-icon-script_generation"></div>
+          </div>
+          <div class="stage-card" id="stage-question_generation">
+            <div><div class="stage-name">2b. Questions</div><div class="stage-info" id="stage-info-question_generation">Pending</div></div>
+            <div class="stage-right" id="stage-icon-question_generation"></div>
+          </div>
+          <div class="stage-card" id="stage-flashcard_generation">
+            <div><div class="stage-name">2c. Flashcards</div><div class="stage-info" id="stage-info-flashcard_generation">Pending</div></div>
+            <div class="stage-right" id="stage-icon-flashcard_generation"></div>
+          </div>
+        </div>
+      </div>
+      <div class="dag-row"><div class="dag-connector">|</div></div>
+      <div class="dag-row">
+        <div class="stage-card" id="stage-audio_generation">
+          <div><div class="stage-name">3. Audio Generation</div><div class="stage-info" id="stage-info-audio_generation">Pending</div></div>
+          <div class="stage-right" id="stage-icon-audio_generation"></div>
+        </div>
+      </div>
+      <div class="dag-row"><div class="dag-connector">|</div></div>
+      <div class="dag-row">
+        <div class="stage-card" id="stage-finalize">
+          <div><div class="stage-name">4. Finalize & Upload</div><div class="stage-info" id="stage-info-finalize">Pending</div></div>
+          <div class="stage-right" id="stage-icon-finalize"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="results-section" id="resultsSection" style="display:none;">
+      <div class="tabs">
+        <div class="tab active" data-tab="concepts">Concepts <span class="count" id="conceptCount">0</span></div>
+        <div class="tab" data-tab="questions">Questions <span class="count" id="questionCount">0</span></div>
+        <div class="tab" data-tab="flashcards">Flashcards <span class="count" id="flashcardCount">0</span></div>
+        <div class="tab" data-tab="script">Script</div>
+        <div class="tab" data-tab="audio">Audio</div>
+      </div>
+      <div class="tab-content active" id="tab-concepts"><div id="conceptsList" class="empty-state">No concepts yet</div></div>
+      <div class="tab-content" id="tab-questions"><div id="questionsList" class="empty-state">No questions yet</div></div>
+      <div class="tab-content" id="tab-flashcards"><div id="flashcardsList" class="empty-state">No flashcards yet</div></div>
+      <div class="tab-content" id="tab-script"><div id="scriptPreview" class="empty-state">No script yet</div></div>
+      <div class="tab-content" id="tab-audio"><div id="audioPlayer" class="empty-state">No audio yet</div></div>
+    </div>
+  </div>
+</div>
+
+<script>
+  let currentEpisodeId = null, pollInterval = null, selectedFile = null;
+
+  const dropZone = document.getElementById('dropZone');
+  const pdfInput = document.getElementById('pdfInput');
+  const startBtn = document.getElementById('startBtn');
+
+  dropZone.addEventListener('click', () => pdfInput.click());
+  dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
+  dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+  dropZone.addEventListener('drop', e => {
+    e.preventDefault(); dropZone.classList.remove('dragover');
+    if (e.dataTransfer.files[0]?.type === 'application/pdf') selectFile(e.dataTransfer.files[0]);
+  });
+  pdfInput.addEventListener('change', e => { if (e.target.files[0]) selectFile(e.target.files[0]); });
+
+  function selectFile(file) {
+    selectedFile = file;
+    document.getElementById('fileName').textContent = file.name;
+    dropZone.classList.add('has-file');
+    startBtn.disabled = false;
+    document.getElementById('btnText').textContent = 'Start Pipeline';
+  }
+
+  // Load ElevenLabs voices
+  (async function() {
+    try {
+      const res = await fetch('/api/voices');
+      const data = await res.json();
+      if (!data.success || !data.data.elevenlabsVoices) return;
+      const voices = data.data.elevenlabsVoices;
+      const groups = {};
+      voices.forEach(v => { const c = v.useCase?.replace(/_/g, ' ') || 'other'; if (!groups[c]) groups[c] = []; groups[c].push(v); });
+      function build(sel, dg) {
+        sel.innerHTML = '';
+        let fm = null;
+        Object.entries(groups).sort().forEach(([cat, vcs]) => {
+          const g = document.createElement('optgroup');
+          g.label = cat.charAt(0).toUpperCase() + cat.slice(1);
+          vcs.forEach(v => {
+            const o = document.createElement('option'); o.value = v.id;
+            o.textContent = `${v.gender === 'male' ? '\u2642' : v.gender === 'female' ? '\u2640' : '\u26A7'} ${v.name} (${v.accent || 'neutral'})`;
+            g.appendChild(o);
+            if (!fm && v.gender === dg) fm = v.id;
+          });
+          sel.appendChild(g);
+        });
+        if (fm) sel.value = fm;
+      }
+      build(document.getElementById('el1VoiceInput'), 'male');
+      build(document.getElementById('el2VoiceInput'), 'female');
+    } catch {}
+  })();
+
+  // Voice preview
+  let previewAudio = null;
+  async function previewVoice(provider, voiceId, btn) {
+    if (!voiceId) return alert('Select a voice first');
+    if (previewAudio) { previewAudio.pause(); previewAudio = null; }
+    btn.classList.add('loading'); btn.innerHTML = '...';
+    try {
+      const res = await fetch(`/api/voice-preview?provider=${provider}&voiceId=${encodeURIComponent(voiceId)}`);
+      if (!res.ok) { const e = await res.json().catch(() => ({ error: 'Failed' })); throw new Error(e.error); }
+      const blob = await res.blob();
+      previewAudio = new Audio(URL.createObjectURL(blob));
+      previewAudio.play();
+      btn.innerHTML = '&#9632;';
+      previewAudio.onended = () => { btn.innerHTML = '&#9654;'; previewAudio = null; };
+      btn.onclick = () => {
+        if (previewAudio) { previewAudio.pause(); previewAudio = null; }
+        btn.innerHTML = '&#9654;';
+        btn.onclick = () => previewVoice(document.getElementById('ttsProviderInput').value, btn.parentElement.querySelector('select')?.value, btn);
+      };
+    } catch (err) { alert('Preview error: ' + err.message); }
+    finally { btn.classList.remove('loading'); if (!previewAudio) btn.innerHTML = '&#9654;'; }
+  }
+
+  function toggleVoiceOptions() {
+    const p = document.getElementById('ttsProviderInput').value;
+    document.getElementById('googleVoiceSection').style.display = p === 'google' ? 'block' : 'none';
+    document.getElementById('elevenlabsVoiceSection').style.display = p === 'elevenlabs' ? 'block' : 'none';
+  }
+
+  startBtn.addEventListener('click', async () => {
+    if (!selectedFile) return;
+    startBtn.disabled = true;
+    document.getElementById('btnText').textContent = 'Creating episode...';
+    const provider = document.getElementById('ttsProviderInput').value;
+    const fd = new FormData();
+    fd.append('pdfFile', selectedFile);
+    fd.append('title', document.getElementById('titleInput').value);
+    fd.append('gradeBand', document.getElementById('gradeInput').value);
+    fd.append('durationMinutes', document.getElementById('durationInput').value);
+    fd.append('speaker1Name', document.getElementById('speaker1Input').value);
+    fd.append('speaker2Name', document.getElementById('speaker2Input').value);
+    fd.append('ttsProvider', provider);
+    if (provider === 'google') {
+      fd.append('speaker1Voice', document.getElementById('speaker1VoiceInput').value);
+      fd.append('speaker2Voice', document.getElementById('speaker2VoiceInput').value);
+    } else {
+      const v1 = document.getElementById('el1VoiceInput').value, v2 = document.getElementById('el2VoiceInput').value;
+      if (!v1 || !v2) { alert('Select voices for both speakers'); startBtn.disabled = false; document.getElementById('btnText').textContent = 'Start Pipeline'; return; }
+      fd.append('elevenlabsSpeaker1VoiceId', v1); fd.append('elevenlabsSpeaker2VoiceId', v2);
+    }
+    try {
+      const res = await fetch('/api/episodes', { method: 'POST', body: fd });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error);
+      currentEpisodeId = data.data.episodeId;
+      showPipeline(data.data.title, currentEpisodeId);
+      startPolling();
+    } catch (err) { alert('Failed: ' + err.message); startBtn.disabled = false; document.getElementById('btnText').textContent = 'Start Pipeline'; }
+  });
+
+  function showPipeline(title, id) {
+    document.getElementById('uploadSection').style.display = 'none';
+    document.getElementById('pipelineSection').classList.add('active');
+    document.getElementById('epTitle').textContent = title;
+    document.getElementById('epId').textContent = id;
+  }
+
+  function resetUI() {
+    if (pollInterval) clearInterval(pollInterval);
+    currentEpisodeId = null; selectedFile = null;
+    document.getElementById('uploadSection').style.display = 'block';
+    document.getElementById('pipelineSection').classList.remove('active');
+    document.getElementById('resultsSection').style.display = 'none';
+    dropZone.classList.remove('has-file');
+    document.getElementById('fileName').textContent = '';
+    startBtn.disabled = true; document.getElementById('btnText').textContent = 'Select a PDF to start';
+    pdfInput.value = '';
+    ['concept_extraction','script_generation','question_generation','flashcard_generation','audio_generation','finalize'].forEach(s => {
+      document.getElementById('stage-' + s).className = 'stage-card';
+      document.getElementById('stage-info-' + s).textContent = 'Pending';
+      document.getElementById('stage-icon-' + s).innerHTML = '';
+    });
+  }
+
+  function startPolling() { updateStatus(); pollInterval = setInterval(updateStatus, 3000); }
+
+  async function updateStatus() {
+    if (!currentEpisodeId) return;
+    try {
+      const res = await fetch(`/api/episodes/${currentEpisodeId}/status`);
+      const data = await res.json();
+      if (!data.success) return;
+      const { pipelineStatus, stages } = data.data;
+      const b = document.getElementById('epStatus'); b.textContent = pipelineStatus; b.className = 'status-badge status-' + pipelineStatus;
+      Object.entries(stages).forEach(([n, i]) => updateStageCard(n, i));
+      if (['completed', 'partial', 'failed'].includes(pipelineStatus)) { clearInterval(pollInterval); await fetchFullEpisode(); }
+    } catch {}
+  }
+
+  function updateStageCard(name, info) {
+    const card = document.getElementById('stage-' + name), infoEl = document.getElementById('stage-info-' + name), iconEl = document.getElementById('stage-icon-' + name);
+    card.className = 'stage-card ' + info.status;
+    if (info.status === 'running') { iconEl.innerHTML = '<div class="spinner"></div>'; infoEl.textContent = 'Processing...'; }
+    else if (info.status === 'completed') { iconEl.innerHTML = '<span class="check">&#10003;</span>'; infoEl.textContent = info.completedAt ? 'Done ' + timeAgo(info.completedAt) : 'Done'; }
+    else if (info.status === 'failed') { iconEl.innerHTML = `<span class="cross">&#10007;</span><button class="btn-retry" onclick="retryStage('${name}')">Retry</button>`; infoEl.textContent = info.error ? info.error.substring(0, 50) : 'Failed'; }
+    else if (info.status === 'skipped') { iconEl.innerHTML = '<span style="color:var(--text-muted)">—</span>'; infoEl.textContent = 'Skipped'; }
+    else { iconEl.innerHTML = ''; infoEl.textContent = 'Waiting...'; }
+  }
+
+  function timeAgo(d) { const s = Math.floor((Date.now() - new Date(d).getTime()) / 1000); if (s < 60) return s + 's ago'; if (s < 3600) return Math.floor(s/60) + 'm ago'; return Math.floor(s/3600) + 'h ago'; }
+
+  async function retryStage(stage) {
+    try { const r = await fetch(`/api/episodes/${currentEpisodeId}/retry/${stage}`, { method: 'POST' }); const d = await r.json(); if (d.success) startPolling(); else alert('Retry failed: ' + d.error); } catch (e) { alert('Retry error: ' + e.message); }
+  }
+
+  async function fetchFullEpisode() {
+    try {
+      const r = await fetch(`/api/episodes/${currentEpisodeId}`); const d = await r.json(); if (!d.success) return;
+      const ep = d.data; document.getElementById('resultsSection').style.display = 'block';
+      renderConcepts(ep.concepts || []); renderQuestions(ep.questions || []); renderFlashcards(ep.flashcards || []);
+      renderScript(ep.scriptJson, ep.speaker1Name, ep.speaker2Name); renderAudio(ep.audioUrl);
+    } catch {}
+  }
+
+  function renderConcepts(c) {
+    document.getElementById('conceptCount').textContent = c.length; if (!c.length) return;
+    document.getElementById('conceptsList').innerHTML = c.map(x => `<div class="concept-card"><h3>${esc(x.name)}</h3><p>${esc(x.description || '')}</p>${x.keyTerms?.length ? `<div class="key-terms">${x.keyTerms.map(t => `<span class="term-badge">${esc(t)}</span>`).join('')}</div>` : ''}</div>`).join('');
+  }
+
+  function renderQuestions(q) {
+    document.getElementById('questionCount').textContent = q.length; if (!q.length) return;
+    const L = ['A','B','C','D'];
+    document.getElementById('questionsList').innerHTML = q.map((x, i) => `<div class="question-card"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;"><span style="color:var(--text-muted);font-size:11px">Q${i+1}</span><span class="difficulty-badge diff-${x.difficulty}">${x.difficulty}</span></div><div class="q-text">${esc(x.question)}</div><ul class="options">${x.options.map((o, j) => `<li class="${j === x.correctIndex ? 'correct' : ''}">${L[j]}. ${esc(o)}</li>`).join('')}</ul>${x.explanation ? `<div class="explanation">${esc(x.explanation)}</div>` : ''}</div>`).join('');
+  }
+
+  function renderFlashcards(f) {
+    document.getElementById('flashcardCount').textContent = f.length; if (!f.length) return;
+    document.getElementById('flashcardsList').innerHTML = f.map(x => `<div class="flashcard" onclick="this.classList.toggle('revealed')"><div class="front">${esc(x.front)}</div><div class="back">${esc(x.back)}</div><div class="flip-hint">Click to reveal</div></div>`).join('');
+  }
+
+  function renderScript(s, s1, s2) {
+    if (!s?.sections) return;
+    const lines = s.sections.map(x => x.text || '').join('\n');
+    const html = lines.split('\n').map(l => { if (l.startsWith(s1 + ':')) return `<span class="speaker1">${esc(l)}</span>`; if (l.startsWith(s2 + ':')) return `<span class="speaker2">${esc(l)}</span>`; return esc(l); }).join('\n');
+    document.getElementById('scriptPreview').innerHTML = `<pre class="script-preview">${html}</pre>`;
+  }
+
+  function renderAudio(url) {
+    if (!url) { document.getElementById('audioPlayer').innerHTML = '<div class="empty-state">Audio not available yet</div>'; return; }
+    document.getElementById('audioPlayer').innerHTML = `<div class="audio-section"><p style="color:var(--sage);font-weight:600;margin-bottom:6px;">Episode audio ready!</p><audio controls src="${esc(url)}"></audio><br><a href="${esc(url)}" target="_blank" style="color:var(--violet);font-size:13px;margin-top:6px;display:inline-block;">Download MP3</a></div>`;
+  }
+
+  document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(x => x.classList.remove('active'));
+    t.classList.add('active'); document.getElementById('tab-' + t.dataset.tab).classList.add('active');
+  }));
+
+  function esc(s) { if (!s) return ''; const d = document.createElement('div'); d.textContent = String(s); return d.innerHTML; }
+</script>
+</body>
+</html>

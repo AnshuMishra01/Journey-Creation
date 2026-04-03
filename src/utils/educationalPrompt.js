@@ -1,19 +1,37 @@
 /**
  * Educational prompt template for generating revision scripts
  */
-const EDUCATIONAL_PROMPT_TEMPLATE = `Generate a comprehensive revision conversation between two Grade {grade_band} students covering ALL content from the provided chapter.
+let jsonrepair;
+try {
+  ({ jsonrepair } = require('jsonrepair'));
+} catch (error) {
+  jsonrepair = null;
+}
+const EDUCATIONAL_PROMPT_TEMPLATE = `
+🚨 CRITICAL WORD COUNT LIMIT 🚨
+MAXIMUM WORDS ALLOWED: {target_words} words
+ABSOLUTE MAXIMUM: {max_words} words
+DO NOT EXCEED THIS LIMIT - THE SCRIPT MUST BE EXACTLY {duration_minutes} MINUTES WHEN SPOKEN
+
+Generate a concise revision conversation between two Grade {grade_band} students covering the most important content from the provided chapter.
 
 CRITICAL REQUIREMENT: You MUST use the exact content, terms, names, dates, and concepts from this chapter text: {chapter_content}
 
 CONTEXT:
-Two students - {speaker1_name} and {speaker2_name} - are doing final revision for their exam. 
+Two students - {speaker1_name} and {speaker2_name} - are doing final revision for their exam.
 They need to cover EVERY important point, term, name, date, and concept from the chapter.
 The listener (YOU) needs complete coverage of all chapter content for exam success.
+
+ROLE DYNAMICS (MANDATORY):
+• {speaker1_name}: struggles to understand, asks naive or silly questions, makes wrong claims and misconceptions
+• {speaker2_name}: explains clearly, corrects misconceptions politely, gives accurate definitions and examples
+• The correction must be explicit: “That’s a common misconception. The correct idea is…”
 
 STUDENT CHARACTERISTICS FOR GRADE {grade_band}:
 • Use age-appropriate vocabulary and sentence structure
 • Show genuine curiosity and confusion like real students
 • Make mistakes and correct each other naturally
+• Include harmless, light humor and silly misunderstandings (no offensive content)
 • Reference "our teacher said..." or "remember when sir/ma'am explained..."
 • Use casual language: "like", "you know", "wait what?", "oh yeah!"
 • Show excitement when understanding something
@@ -26,6 +44,8 @@ CONVERSATION STYLE:
 • Natural interruptions and "aha!" moments
 • Students building on each other's understanding
 • Casual references to classroom experience: "When teacher drew that diagram..."
+• Include short, humorous conversational examples to explain concepts (keep them quick and relevant)
+• Misconceptions must be raised and corrected clearly
 
 EXAM PREPARATION REQUIREMENTS:
 
@@ -44,6 +64,13 @@ STUDY SESSION DIALOGUE:
 • "We need to remember this word-for-word"
 • "The chapter mentions that..." 
 • "According to our textbook..."
+
+MISCONCEPTIONS & CORRECTIONS (REQUIRED):
+• Add misconceptions for key terms and concepts (at least 1 per major concept)
+• Example pattern:
+  - {speaker1_name}: "So periodisation just means dividing history randomly, right?"
+  - {speaker2_name}: "Common misconception. The correct idea is... [textbook definition]"
+• Keep misconceptions realistic and aligned to chapter content
 
 KEY CONCEPTS FOCUS:
 • Cover all major concepts from the extracted content: {concepts}
@@ -81,16 +108,39 @@ Ending (exam-ready):
 IMPORTANT GUIDELINES:
 • Students should sound their actual age - not like mini-professors
 • Include natural hesitations, corrections, and "um"s
-• Show the learning process, not just final understanding
-• Reference the classroom setting and shared experience
-• Make it feel like overhearing real students study together
+• Show the learning process, not just final understa  
+• Use plain text only with proper punctuation
+• For emphasis, use quotes or natural speech patterns instead
+• Example: Instead of "*important*", say "this is really important"
+• When referring to figures/diagrams/tables from the textbook, ALWAYS include the complete reference with number (e.g., "Figure 2.1", "Table 3.4", "Diagram 1.2")
+• NEVER use abbreviations like "Fig" - always write "Figure" in full with the number
+
+⚠️ ABSOLUTE WORD COUNT LIMIT ⚠️
+TARGET: {target_words} words (for {duration_minutes} minutes)
+HARD LIMIT: {max_words} words - NEVER EXCEED THIS
+Speech rate: 130 words per minute in conversation
+If you write more than {max_words} words, the script will be REJECTED
+PRIORITIZE the most important concepts and be CONCISE
+Better to cover key points well than everything superficially
+
+CONTENT PRIORITIZATION (due to word limit):
+• Focus on the MOST IMPORTANT concepts, terms, and definitions
+• Skip minor details if necessary to stay within word count
+• Prioritize exam-critical information
+• Be selective - quality over quantityrds} words for {duration_minutes} minutes
+• Maximum allowed: {max_words} words
+• DO NOT EXCEED the word count or the audio will be too long
+• Each minute of speech = approximately 130 words in conversational dialogue
+• Count your words carefully and stay within the limit
 
 MANDATORY CONTENT COVERAGE:
-• MUST mention ALL names: James Mill, James Rennel, Robert Clive, Warren Hastings, Wellesley, Bentinck, Dalhousie, Canning, Lawrence, Lytton, Ripon, Curzon, Harding, Irwin, Lord Mountbatten
-• MUST mention ALL dates: 1817, 1782, 1773, and any other dates in the chapter
-• MUST define ALL terms: periodisation, colonialism, calligraphists, census, surveys, archives, official records
-• MUST explain ALL concepts: Hindu-Muslim-British periods, ancient-medieval-modern classification, problems with each
-• MUST mention ALL examples: tea/coffee, railways, newspapers, botanical surveys, zoological surveys, archaeological surveys
+• MUST mentichapter content: {chapter_content}
+2. Identify the TOP PRIORITY concepts (most exam-important)
+3. Plan to write EXACTLY {target_words} words (max {max_words})
+4. Focus on KEY concepts only - be selective and concise
+5. Remember: This is {duration_minutes} minutes = {target_words} words MAXIMUM
+
+🎯 FINAL REMINDER: Your script MUST be between {target_words}-{max_words} words total. Count carefully!ical surveys, zoological surveys, archaeological surveys
 • MUST discuss ALL source types: official records, diaries, autobiographies, newspapers, government files
 • MUST explain why official records have limitations
 • MUST explain why the book is called 'Our Pasts' (plural)
@@ -104,6 +154,10 @@ BEFORE WRITING THE SCRIPT:
 5. Students should discuss the content systematically and thoroughly
 
 RETURN VALID JSON ONLY (no markdown, no extra text):
+IMPORTANT JSON SAFETY RULES:
+• Do NOT include unescaped double quotes inside any JSON string values.
+• If you need quotes in dialogue, use single quotes (') or escape as \".
+• Keep line breaks inside JSON strings as \n.
 {{
   "episode_index": {episode_number},
   "title": "Episode {episode_number}: {episode_title}",
@@ -148,8 +202,12 @@ function buildEducationalPrompt(metadata, chapterContent) {
   } = metadata;
 
   const durationSeconds = durationMinutes * 60;
-  const minWords = Math.floor(durationMinutes * 120); // ~120 words/minute (slower pace)
-  const targetWords = Math.floor(durationMinutes * 150); // ~150 words/minute
+  // Adjusted for accurate duration: Average speech rate for conversational TTS
+  // Using 130 words/minute for natural conversation with pauses
+  const targetWords = Math.floor(durationMinutes * 130); // 130 words/minute target
+  const maxWords = Math.floor(durationMinutes * 140); // Hard upper limit
+  
+  console.log(`[Prompt Builder] Duration: ${durationMinutes} min, Target: ${targetWords} words, Max: ${maxWords} words`);
 
   return EDUCATIONAL_PROMPT_TEMPLATE
     .replace(/{grade_band}/g, gradeBand)
@@ -157,8 +215,8 @@ function buildEducationalPrompt(metadata, chapterContent) {
     .replace(/{speaker2_name}/g, speaker2Name)
     .replace(/{duration_minutes}/g, durationMinutes)
     .replace(/{duration_seconds}/g, durationSeconds)
-    .replace(/{min_words}/g, minWords)
     .replace(/{target_words}/g, targetWords)
+    .replace(/{max_words}/g, maxWords)
     .replace(/{chapter_content}/g, chapterContent)
     .replace(/{episode_number}/g, episodeNumber)
     .replace(/{episode_title}/g, episodeTitle)
@@ -192,22 +250,57 @@ function extractBasicConcepts(content) {
  */
 function validateEducationalScript(response) {
   try {
+    console.log('[Validation] Raw response length:', response.length);
+    console.log('[Validation] First 200 chars:', response.substring(0, 200));
+    
     // Clean response - remove markdown formatting if present
-    const cleanResponse = response
+    let cleanResponse = response
       .replace(/```json\n?/g, '')
       .replace(/```\n?/g, '')
+      .replace(/^[^{]*/, '') // Remove anything before first {
+      .replace(/[^}]*$/, '') // Remove anything after last }
       .trim();
     
-    const script = JSON.parse(cleanResponse);
+    console.log('[Validation] Cleaned response length:', cleanResponse.length);
+    console.log('[Validation] Cleaned first 200 chars:', cleanResponse.substring(0, 200));
     
-    // Validate required fields
-    const requiredFields = [
-      'episode_index', 'title', 'estimated_duration_seconds',
-      'word_count', 'grade_level', 'sections'
-    ];
+    // Try to find and extract JSON object
+    const jsonMatch = cleanResponse.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      cleanResponse = jsonMatch[0];
+      console.log('[Validation] Extracted JSON from match, length:', cleanResponse.length);
+    }
+    
+    // Parse JSON
+    let script;
+    try {
+      script = JSON.parse(cleanResponse);
+    } catch (parseError) {
+      console.error('[Validation] JSON parse error:', parseError.message);
+      console.error('[Validation] Failed JSON (first 500 chars):', cleanResponse.substring(0, 500));
+
+      if (jsonrepair) {
+        try {
+          const repaired = jsonrepair(cleanResponse);
+          script = JSON.parse(repaired);
+          console.log('[Validation] JSON repaired successfully');
+        } catch (repairError) {
+          console.error('[Validation] JSON repair failed:', repairError.message);
+          throw new Error(`Failed to parse JSON: ${parseError.message}`);
+        }
+      } else {
+        throw new Error(`Failed to parse JSON: ${parseError.message}`);
+      }
+    }
+    
+    console.log('[Validation] Successfully parsed JSON with keys:', Object.keys(script));
+    
+    // Validate required fields with more flexibility
+    const requiredFields = ['title', 'sections'];
     
     const missing = requiredFields.filter(field => !script[field]);
     if (missing.length > 0) {
+      console.error('[Validation] Missing required fields:', missing);
       return {
         isValid: false,
         error: `Missing required fields: ${missing.join(', ')}`,
@@ -217,6 +310,7 @@ function validateEducationalScript(response) {
     
     // Validate sections
     if (!Array.isArray(script.sections) || script.sections.length === 0) {
+      console.error('[Validation] Invalid sections:', script.sections);
       return {
         isValid: false,
         error: 'Script must have at least one section',
@@ -224,17 +318,20 @@ function validateEducationalScript(response) {
       };
     }
     
+    console.log('[Validation] Validation successful!');
+    
     return {
       isValid: true,
       script: script,
-      wordCount: script.word_count,
-      duration: script.estimated_duration_seconds
+      wordCount: script.word_count || 0,
+      duration: script.estimated_duration_seconds || 0
     };
     
   } catch (error) {
+    console.error('[Validation] Unexpected error:', error);
     return {
       isValid: false,
-      error: `JSON parsing error: ${error.message}`,
+      error: `Validation error: ${error.message}`,
       script: null
     };
   }

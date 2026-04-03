@@ -240,10 +240,14 @@ router.post('/regenerate-script', async (req, res) => {
     const scriptValidation = validateEducationalScript(response.data.response);
     
     if (!scriptValidation.isValid) {
+      console.error('Script validation failed:', scriptValidation.error);
+      console.error('Raw response:', response.data.response.substring(0, 1000));
+      
       return res.status(400).json({
         success: false,
         error: 'Regenerated script validation failed',
-        details: scriptValidation.error
+        details: scriptValidation.error,
+        rawResponse: response.data.response.substring(0, 1000) + '...'
       });
     }
 

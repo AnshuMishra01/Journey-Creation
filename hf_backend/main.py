@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from pydantic import BaseModel
 import os
 import sys
+import time
 import warnings
 
 # Suppress warnings for older Python versions
@@ -31,23 +32,45 @@ def get_gemini_model():
     
     try:
         genai.configure(api_key=api_key)
-        # Use Gemini 2.0 Flash - latest model for educational content
+        # Use Gemini 2.5 Flash - latest model for educational content
         try:
-            model = genai.GenerativeModel("gemini-2.0-flash-exp")
-            print(f"✅ Using Gemini 2.0 Flash model")
+            model = genai.GenerativeModel("gemini-2.5-flash")
+            print(f"✅ Using Gemini 2.5 Flash model")
         except Exception as e:
-            print(f"⚠️  Gemini 2.0 Flash not available, trying fallback: {e}")
+            print(f"⚠️  Gemini 2.5 Flash not available, trying fallback: {e}")
             try:
-                model = genai.GenerativeModel("gemini-1.5-flash")
-                print(f"✅ Using Gemini 1.5 Flash model")
+                model = genai.GenerativeModel("gemini-2.0-flash")
+                print(f"✅ Using Gemini 2.0 Flash model")
             except:
-                model = genai.GenerativeModel("gemini-pro")
-                print(f"✅ Using Gemini Pro model")
+                model = genai.GenerativeModel("gemini-2.0-flash-lite")
+                print(f"✅ Using Gemini 2.0 Flash Lite model")
         print(f"✅ Gemini model initialized successfully")
         return model, api_key
     except Exception as e:
         print(f"❌ Error configuring Gemini: {e}")
         return None, None
+
+def _call_gemini_with_retry(model, prompt):
+    max_retries = int(os.getenv("GEMINI_MAX_RETRIES", "3"))
+    base_delay = float(os.getenv("GEMINI_RETRY_BASE_DELAY", "2.0"))
+
+    last_error = None
+    for attempt in range(1, max_retries + 1):
+        try:
+            return model.generate_content(prompt)
+        except Exception as e:
+            last_error = e
+            error_text = str(e)
+            print(f"❌ Gemini API error (attempt {attempt}/{max_retries}): {error_text}")
+
+            # If this looks like a DNS resolution failure, retries still help but add context
+            if "DNS resolution failed" in error_text or "generativelanguage.googleapis.com" in error_text:
+                print("⚠️  Detected DNS resolution issue. Retrying after backoff...")
+
+            if attempt < max_retries:
+                time.sleep(base_delay * attempt)
+
+    raise last_error
 
 app = FastAPI()
 
@@ -69,7 +92,7 @@ def generate(req: PromptRequest):
         # Just send the prompt directly for better compatibility
         print(f"🤖 Generating content with prompt length: {len(req.prompt)} characters")
         
-        response = model.generate_content(req.prompt)
+        response = _call_gemini_with_retry(model, req.prompt)
         
         if response and response.text:
             print(f"✅ Generated response length: {len(response.text)} characters")
@@ -79,8 +102,18 @@ def generate(req: PromptRequest):
             return {"response": "Error: Empty response from Gemini API"}
             
     except Exception as e:
-        print(f"❌ Error calling Gemini API: {e}")
-        return {"response": f"Error calling Gemini API: {str(e)}"}
+        error_text = str(e)
+        print(f"❌ Error calling Gemini API: {error_text}")
+
+        if "DNS resolution failed" in error_text or "generativelanguage.googleapis.com" in error_text:
+            return {
+                "response": (
+                    "Error calling Gemini API: DNS resolution failed for generativelanguage.googleapis.com. "
+                    "Please check your internet connection, DNS settings, or corporate proxy, then try again."
+                )
+            }
+
+        return {"response": f"Error calling Gemini API: {error_text}"}
 
 @app.get("/")
 def root():
