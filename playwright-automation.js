@@ -27,7 +27,7 @@ const GOOGLE_SPEAKER_VOICE = process.env.GOOGLE_SPEAKER_VOICE || 'en-IN-NeerjaNe
 // Initialize Google TTS client - Always initialize for educational content
 let googleTTSClient = null;
 
-// Check for service account credentials first
+// Check for service account credentials — file path OR inline JSON env var
 if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
   try {
     googleTTSClient = new TextToSpeechClient();
@@ -35,15 +35,16 @@ if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
   } catch (error) {
     console.error('[Google TTS] ❌ Service account initialization failed:', error.message);
   }
-} else if (GOOGLE_TTS_KEY) {
-  console.log('[Google TTS] ⚠️  API key found but Google TTS requires service account authentication');
-  console.log('[Google TTS] Please set up service account credentials:');
-  console.log('[Google TTS] 1. Create service account at https://console.cloud.google.com/');
-  console.log('[Google TTS] 2. Download JSON key file');
-  console.log('[Google TTS] 3. Set GOOGLE_APPLICATION_CREDENTIALS=/path/to/key.json');
+} else if (process.env.GOOGLE_TTS_CREDENTIALS_JSON) {
+  try {
+    const creds = JSON.parse(process.env.GOOGLE_TTS_CREDENTIALS_JSON);
+    googleTTSClient = new TextToSpeechClient({ credentials: creds });
+    console.log('[Google TTS] ✅ Client initialized with env var JSON credentials');
+  } catch (error) {
+    console.error('[Google TTS] ❌ JSON credentials init failed:', error.message);
+  }
 } else {
-  console.log('[Google TTS] ❌ No Google TTS credentials found');
-  console.log('[Google TTS] Please set up Google Cloud TTS service account');
+  console.log('[Google TTS] ⚠️  No Google TTS credentials found (set GOOGLE_APPLICATION_CREDENTIALS or GOOGLE_TTS_CREDENTIALS_JSON)');
 }
 
 // Test Google TTS client
