@@ -6,6 +6,7 @@ const { eq, and } = require('drizzle-orm');
 const fs = require('fs');
 const path = require('path');
 const axios = require('axios');
+const { uploadAudio } = require('../../services/r2.service');
 
 // Reuse existing TTS and merge utilities
 const { generateIndianTTS, isIndianVoiceSupported } = require('../../utils/indianTTSConfig');
@@ -223,15 +224,34 @@ const worker = new Worker('audio-generation', async (job) => {
     const stats = fs.statSync(mergedPath);
     console.log(`[AudioGeneration] Merged audio: ${(stats.size / 1024 / 1024).toFixed(2)} MB`);
 
-    // Store the temp path in episode metadata for the finalize worker
+    // Upload to R2 directly from audio worker (don't rely on finalize)
+    let audioUrl = null;
+    let audioStorageKey = null;
+    try {
+      const result = await uploadAudio(episodeId, mergedPath);
+      audioUrl = result.url;
+      audioStorageKey = result.key;
+      console.log(`[AudioGeneration] Uploaded to R2: ${audioUrl}`);
+    } catch (uploadErr) {
+      console.error(`[AudioGeneration] R2 upload failed:`, uploadErr.message);
+    }
+
+    // Save audio URL directly to episode
     await db.update(episodes).set({
-      metadata: { ...(episode.metadata || {}), tempAudioPath: mergedPath },
+      audioUrl,
+      audioStorageKey,
       updatedAt: new Date(),
     }).where(eq(episodes.id, episodeId));
 
+    // Clean up temp files
+    try {
+      fs.rmSync(outputDir, { recursive: true, force: true });
+      console.log(`[AudioGeneration] Cleaned up temp dir: ${outputDir}`);
+    } catch {}
+
     await updateStage(episodeId, 'completed', { completedAt: new Date() });
 
-    return { mergedPath, lineCount: dialogueLines.length };
+    return { audioUrl, lineCount: dialogueLines.length };
 
   } catch (err) {
     console.error(`[AudioGeneration] Failed for episode ${episodeId}:`, err.message);
