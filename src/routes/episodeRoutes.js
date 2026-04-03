@@ -9,10 +9,12 @@ const axios = require('axios');
 const path = require('path');
 const fs = require('fs');
 
-// Google TTS client for voice previews
+// Google TTS client for voice previews — supports file path OR env var JSON
 let previewTTSClient = null;
 if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
   try { previewTTSClient = new TextToSpeechClient(); } catch {}
+} else if (process.env.GOOGLE_TTS_CREDENTIALS_JSON) {
+  try { previewTTSClient = new TextToSpeechClient({ credentials: JSON.parse(process.env.GOOGLE_TTS_CREDENTIALS_JSON) }); } catch {}
 }
 
 // Available voice options for the frontend

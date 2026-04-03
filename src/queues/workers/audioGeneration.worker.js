@@ -11,15 +11,24 @@ const axios = require('axios');
 const { generateIndianTTS, isIndianVoiceSupported } = require('../../utils/indianTTSConfig');
 const { mergeAudiosInOrder } = require('../../../merge_audio');
 
-// Google TTS client initialization
+// Google TTS client initialization — supports file path OR env var JSON
 const { TextToSpeechClient } = require('@google-cloud/text-to-speech');
 let googleTTSClient = null;
+
 if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
   try {
     googleTTSClient = new TextToSpeechClient();
-    console.log('[AudioWorker] Google TTS client initialized');
+    console.log('[AudioWorker] Google TTS initialized via credentials file');
   } catch (err) {
-    console.error('[AudioWorker] Google TTS init failed:', err.message);
+    console.error('[AudioWorker] Google TTS file init failed:', err.message);
+  }
+} else if (process.env.GOOGLE_TTS_CREDENTIALS_JSON) {
+  try {
+    const creds = JSON.parse(process.env.GOOGLE_TTS_CREDENTIALS_JSON);
+    googleTTSClient = new TextToSpeechClient({ credentials: creds });
+    console.log('[AudioWorker] Google TTS initialized via env var JSON');
+  } catch (err) {
+    console.error('[AudioWorker] Google TTS JSON init failed:', err.message);
   }
 }
 
