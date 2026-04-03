@@ -23,66 +23,91 @@ const worker = new Worker('finalize', async (job) => {
   await updateStage(episodeId, 'running', { startedAt: new Date() });
 
   try {
-    // Read episode to get the temp audio path
     const [episode] = await db.select().from(episodes).where(eq(episodes.id, episodeId));
     if (!episode) throw new Error('Episode not found');
 
-    // Check all pipeline stages to determine final status
+    // Check all pipeline stages
     const stages = await db.select().from(pipelineStages)
       .where(eq(pipelineStages.episodeId, episodeId));
 
     const stageMap = {};
-    for (const s of stages) {
-      stageMap[s.stageName] = s.status;
-    }
+    for (const s of stages) stageMap[s.stageName] = s.status;
 
     const hasFailures = Object.entries(stageMap)
       .filter(([name]) => name !== 'finalize')
       .some(([, status]) => status === 'failed');
 
-    // Upload audio to R2 if audio generation succeeded
+    // Upload audio to R2
     let audioUrl = null;
     let audioStorageKey = null;
     const tempAudioPath = episode.metadata?.tempAudioPath;
 
+    console.log(`[Finalize] tempAudioPath: ${tempAudioPath}`);
+    console.log(`[Finalize] File exists: ${tempAudioPath ? fs.existsSync(tempAudioPath) : 'no path'}`);
+    console.log(`[Finalize] Audio stage status: ${stageMap['audio_generation']}`);
+
     if (tempAudioPath && fs.existsSync(tempAudioPath)) {
+      const stats = fs.statSync(tempAudioPath);
+      console.log(`[Finalize] Audio file size: ${(stats.size / 1024 / 1024).toFixed(2)} MB`);
+
       try {
         const result = await uploadAudio(episodeId, tempAudioPath);
         audioUrl = result.url;
         audioStorageKey = result.key;
-        console.log(`[Finalize] Audio uploaded to R2: ${audioStorageKey}`);
+        console.log(`[Finalize] Audio uploaded to R2: ${audioUrl}`);
       } catch (uploadErr) {
         console.error(`[Finalize] R2 upload failed:`, uploadErr.message);
-        // Don't fail the whole finalize — mark partial
+        // Still mark partial if upload failed
       }
 
       // Clean up temp audio directory
-      const outputDir = path.dirname(tempAudioPath);
       try {
-        fs.rmSync(outputDir, { recursive: true, force: true });
-        console.log(`[Finalize] Cleaned up temp dir: ${outputDir}`);
-      } catch {
-        // Ignore cleanup errors
-      }
+        fs.rmSync(path.dirname(tempAudioPath), { recursive: true, force: true });
+        console.log(`[Finalize] Cleaned up temp dir`);
+      } catch {}
     } else if (stageMap['audio_generation'] === 'completed') {
-      console.warn(`[Finalize] Audio stage completed but temp file not found`);
+      console.warn(`[Finalize] Audio stage completed but temp file not found at: ${tempAudioPath}`);
+
+      // Try to find the audio file in the outputs directory
+      const outputBase = path.join(__dirname, '..', '..', '..', 'outputs');
+      const episodeDir = path.join(outputBase, `episode-${episodeId}`);
+      const mergedPath = path.join(episodeDir, 'merged.mp3');
+
+      console.log(`[Finalize] Checking fallback path: ${mergedPath}`);
+
+      if (fs.existsSync(mergedPath)) {
+        console.log(`[Finalize] Found audio at fallback path, uploading...`);
+        try {
+          const result = await uploadAudio(episodeId, mergedPath);
+          audioUrl = result.url;
+          audioStorageKey = result.key;
+          console.log(`[Finalize] Audio uploaded from fallback: ${audioUrl}`);
+        } catch (uploadErr) {
+          console.error(`[Finalize] Fallback R2 upload failed:`, uploadErr.message);
+        }
+
+        try { fs.rmSync(episodeDir, { recursive: true, force: true }); } catch {}
+      } else {
+        console.warn(`[Finalize] No audio file found at fallback path either`);
+      }
     }
 
-    // Determine final pipeline status
+    // Determine final status
     let finalStatus;
     if (hasFailures) {
       finalStatus = 'partial';
-    } else if (!audioUrl && stageMap['audio_generation'] === 'failed') {
+    } else if (!audioUrl && stageMap['audio_generation'] === 'completed') {
+      // Audio generated but upload failed — still partial
       finalStatus = 'partial';
     } else {
       finalStatus = 'completed';
     }
 
-    // Clean metadata (remove tempAudioPath)
+    // Clean metadata
     const cleanMetadata = { ...(episode.metadata || {}) };
     delete cleanMetadata.tempAudioPath;
 
-    // Update episode with final data
+    // Update episode
     await db.update(episodes).set({
       pipelineStatus: finalStatus,
       audioUrl: audioUrl || episode.audioUrl,
@@ -93,7 +118,7 @@ const worker = new Worker('finalize', async (job) => {
 
     await updateStage(episodeId, 'completed', { completedAt: new Date() });
 
-    console.log(`[Finalize] Episode ${episodeId} finalized with status: ${finalStatus}`);
+    console.log(`[Finalize] Episode ${episodeId} finalized: status=${finalStatus}, audioUrl=${audioUrl || 'null'}`);
 
     return { finalStatus, audioUrl };
 
