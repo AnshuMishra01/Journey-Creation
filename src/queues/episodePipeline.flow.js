@@ -2,6 +2,9 @@ const { FlowProducer, Queue } = require('bullmq');
 const { connection } = require('./connection');
 
 const flowProducer = new FlowProducer({ connection });
+flowProducer.on('error', (err) => {
+  console.error('[FlowProducer] Error:', err.message);
+});
 
 const STAGE_NAMES = [
   'concept_extraction', 'script_generation', 'question_generation',

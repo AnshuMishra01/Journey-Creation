@@ -28,6 +28,13 @@ module.exports = {
   GOOGLE_HOST_VOICE: optional('GOOGLE_HOST_VOICE', 'en-IN-Chirp3-HD-Puck'),
   GOOGLE_SPEAKER_VOICE: optional('GOOGLE_SPEAKER_VOICE', 'en-IN-Chirp3-HD-Sulafat'),
 
+  // AI Provider: "openai" (default/primary), "gemini", or "" (auto: openai > gemini)
+  AI_PROVIDER: optional('AI_PROVIDER', ''),
+
   // Gemini
   GEMINI_API_KEY: optional('GEMINI_API_KEY'),
+
+  // OpenAI
+  OPENAI_API_KEY: optional('OPENAI_API_KEY'),
+  OPENAI_MODEL: optional('OPENAI_MODEL', 'gpt-4o'),
 };

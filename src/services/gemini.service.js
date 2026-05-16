@@ -1,5 +1,5 @@
 const axios = require('axios');
-const { PYTHON_BACKEND_URL } = require('../config/env');
+const { PYTHON_BACKEND_URL, AI_PROVIDER } = require('../config/env');
 
 let jsonrepair;
 try {
@@ -131,12 +131,13 @@ function findBalancedJson(str) {
 }
 
 /**
- * Call the Python Gemini backend and return parsed JSON.
+ * Call the Python AI backend and return parsed JSON.
+ * Provider priority: OpenAI (primary) > Gemini (fallback), controlled by AI_PROVIDER env.
  */
-async function callGemini(prompt, { timeout = 120000 } = {}) {
+async function callGemini(prompt, { timeout = 120000, provider } = {}) {
   // Circuit breaker check
   if (circuitBreaker.isOpen()) {
-    throw new GeminiError('Circuit breaker open — Gemini API has too many consecutive failures. Waiting for cooldown.', true);
+    throw new GeminiError('Circuit breaker open — AI API has too many consecutive failures. Waiting for cooldown.', true);
   }
 
   let response;
@@ -144,6 +145,7 @@ async function callGemini(prompt, { timeout = 120000 } = {}) {
     response = await axios.post(`${PYTHON_BACKEND_URL}/generate`, {
       prompt,
       history: [],
+      provider: provider || AI_PROVIDER || '',
     }, { timeout });
   } catch (err) {
     circuitBreaker.recordFailure();
@@ -154,13 +156,13 @@ async function callGemini(prompt, { timeout = 120000 } = {}) {
       const status = err.response.status;
       const retryable = RETRYABLE_CODES.has(status);
       throw new GeminiError(
-        `Gemini API error (${status}): ${err.response.data?.detail || err.message}`,
+        `AI API error (${status}): ${err.response.data?.detail || err.message}`,
         retryable,
         status
       );
     }
     if (err.code === 'ECONNABORTED') {
-      throw new GeminiError('Gemini request timed out', true);
+      throw new GeminiError('AI request timed out', true);
     }
     throw new GeminiError(`Network error: ${err.message}`, true);
   }
@@ -169,21 +171,26 @@ async function callGemini(prompt, { timeout = 120000 } = {}) {
 
   const raw = response.data?.response;
   if (!raw) {
-    throw new GeminiError('Empty response from Gemini', true);
+    throw new GeminiError('Empty response from AI backend', true);
+  }
+
+  if (response.data?.provider) {
+    console.log(`[AI] Response from provider: ${response.data.provider}`);
   }
 
   return parseGeminiJson(raw);
 }
 
 /**
- * Call Gemini and return raw text (no JSON parsing).
+ * Call AI backend and return raw text (no JSON parsing).
  */
-async function callGeminiRaw(prompt, { timeout = 120000 } = {}) {
+async function callGeminiRaw(prompt, { timeout = 120000, provider } = {}) {
   let response;
   try {
     response = await axios.post(`${PYTHON_BACKEND_URL}/generate`, {
       prompt,
       history: [],
+      provider: provider || AI_PROVIDER || '',
     }, { timeout });
   } catch (err) {
     if (err.code === 'ECONNREFUSED' || err.code === 'ENOTFOUND') {
@@ -192,7 +199,7 @@ async function callGeminiRaw(prompt, { timeout = 120000 } = {}) {
     if (err.response) {
       const status = err.response.status;
       throw new GeminiError(
-        `Gemini API error (${status}): ${err.response.data?.detail || err.message}`,
+        `AI API error (${status}): ${err.response.data?.detail || err.message}`,
         RETRYABLE_CODES.has(status),
         status
       );

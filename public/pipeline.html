@@ -164,6 +164,40 @@
 
     .empty-state { text-align: center; padding: 32px; color: var(--text-muted); font-size: 14px; }
 
+    /* Log Panel */
+    .log-panel {
+      background: var(--dark); border-radius: var(--radius); margin-top: 20px;
+      overflow: hidden; border: 1px solid rgba(255,255,255,0.08);
+    }
+    .log-header {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 10px 16px; background: rgba(255,255,255,0.04); border-bottom: 1px solid rgba(255,255,255,0.06);
+    }
+    .log-header h3 { font-size: 12px; font-weight: 600; color: #aaa; text-transform: uppercase; letter-spacing: 0.5px; }
+    .log-header button {
+      background: none; border: 1px solid rgba(255,255,255,0.15); color: #888; font-size: 11px;
+      padding: 3px 10px; border-radius: 4px; cursor: pointer; font-family: inherit;
+    }
+    .log-header button:hover { border-color: rgba(255,255,255,0.3); color: #ccc; }
+    .log-body {
+      padding: 12px 16px; max-height: 300px; overflow-y: auto; font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: 12px; line-height: 1.7;
+    }
+    .log-entry { padding: 2px 0; border-bottom: 1px solid rgba(255,255,255,0.03); }
+    .log-entry .log-time { color: #555; margin-right: 8px; }
+    .log-entry.log-info .log-msg { color: #8cb4ff; }
+    .log-entry.log-success .log-msg { color: #6fcf97; }
+    .log-entry.log-warn .log-msg { color: #f2c94c; }
+    .log-entry.log-error .log-msg { color: #eb5757; }
+    .log-entry .log-badge {
+      display: inline-block; font-size: 10px; font-weight: 600; padding: 1px 5px;
+      border-radius: 3px; margin-right: 6px; text-transform: uppercase;
+    }
+    .log-info .log-badge { background: rgba(140,180,255,0.15); color: #8cb4ff; }
+    .log-success .log-badge { background: rgba(111,207,151,0.15); color: #6fcf97; }
+    .log-warn .log-badge { background: rgba(242,201,76,0.15); color: #f2c94c; }
+    .log-error .log-badge { background: rgba(235,87,87,0.15); color: #eb5757; }
+
     .new-episode-btn {
       background: var(--warm-white); border: 1px solid var(--sand); color: var(--text-dim);
       padding: 6px 14px; border-radius: 8px; cursor: pointer; font-size: 12px; font-family: inherit; font-weight: 600;
@@ -284,6 +318,17 @@
     </div>
   </div>
 
+  <!-- Log Panel (always visible) -->
+  <div class="log-panel" id="logPanel">
+    <div class="log-header">
+      <h3>Activity Log</h3>
+      <button onclick="clearLogs()">Clear</button>
+    </div>
+    <div class="log-body" id="logBody">
+      <div class="log-entry log-info"><span class="log-time">--:--:--</span><span class="log-badge">info</span><span class="log-msg">Ready. Select a PDF and start the pipeline.</span></div>
+    </div>
+  </div>
+
   <!-- Pipeline Status -->
   <div id="pipelineSection" class="pipeline-section">
     <div class="pipeline-header">
@@ -358,6 +403,24 @@
 <script>
   let currentEpisodeId = null, pollInterval = null, selectedFile = null;
 
+  // --- Log System ---
+  function log(level, msg) {
+    const body = document.getElementById('logBody');
+    const now = new Date();
+    const time = now.toLocaleTimeString('en-US', { hour12: false });
+    const entry = document.createElement('div');
+    entry.className = `log-entry log-${level}`;
+    entry.innerHTML = `<span class="log-time">${time}</span><span class="log-badge">${level}</span><span class="log-msg">${esc(msg)}</span>`;
+    body.appendChild(entry);
+    body.scrollTop = body.scrollHeight;
+    // Keep max 200 entries
+    while (body.children.length > 200) body.removeChild(body.firstChild);
+  }
+  function clearLogs() {
+    document.getElementById('logBody').innerHTML = '';
+    log('info', 'Logs cleared.');
+  }
+
   const dropZone = document.getElementById('dropZone');
   const pdfInput = document.getElementById('pdfInput');
   const startBtn = document.getElementById('startBtn');
@@ -377,6 +440,7 @@
     dropZone.classList.add('has-file');
     startBtn.disabled = false;
     document.getElementById('btnText').textContent = 'Start Pipeline';
+    log('info', `PDF selected: ${file.name} (${(file.size / 1024).toFixed(1)} KB)`);
   }
 
   // Load ElevenLabs voices
@@ -384,7 +448,7 @@
     try {
       const res = await fetch('/api/voices');
       const data = await res.json();
-      if (!data.success || !data.data.elevenlabsVoices) return;
+      if (!data.success || !data.data.elevenlabsVoices) { log('warn', 'Could not load ElevenLabs voices.'); return; }
       const voices = data.data.elevenlabsVoices;
       const groups = {};
       voices.forEach(v => { const c = v.useCase?.replace(/_/g, ' ') || 'other'; if (!groups[c]) groups[c] = []; groups[c].push(v); });
@@ -406,7 +470,8 @@
       }
       build(document.getElementById('el1VoiceInput'), 'male');
       build(document.getElementById('el2VoiceInput'), 'female');
-    } catch {}
+      log('info', `Loaded ${voices.length} ElevenLabs voices.`);
+    } catch (err) { log('warn', `Voice loading error: ${err.message}`); }
   })();
 
   // Voice preview
@@ -442,6 +507,7 @@
     if (!selectedFile) return;
     startBtn.disabled = true;
     document.getElementById('btnText').textContent = 'Creating episode...';
+    log('info', 'Creating episode... uploading PDF and configuration.');
     const provider = document.getElementById('ttsProviderInput').value;
     const fd = new FormData();
     fd.append('pdfFile', selectedFile);
@@ -451,22 +517,31 @@
     fd.append('speaker1Name', document.getElementById('speaker1Input').value);
     fd.append('speaker2Name', document.getElementById('speaker2Input').value);
     fd.append('ttsProvider', provider);
+    log('info', `Config: provider=${provider}, grade=${document.getElementById('gradeInput').value}, duration=${document.getElementById('durationInput').value}min`);
     if (provider === 'google') {
       fd.append('speaker1Voice', document.getElementById('speaker1VoiceInput').value);
       fd.append('speaker2Voice', document.getElementById('speaker2VoiceInput').value);
     } else {
       const v1 = document.getElementById('el1VoiceInput').value, v2 = document.getElementById('el2VoiceInput').value;
-      if (!v1 || !v2) { alert('Select voices for both speakers'); startBtn.disabled = false; document.getElementById('btnText').textContent = 'Start Pipeline'; return; }
+      if (!v1 || !v2) { log('error', 'Voice selection missing for ElevenLabs speakers.'); startBtn.disabled = false; document.getElementById('btnText').textContent = 'Start Pipeline'; return; }
       fd.append('elevenlabsSpeaker1VoiceId', v1); fd.append('elevenlabsSpeaker2VoiceId', v2);
     }
     try {
       const res = await fetch('/api/episodes', { method: 'POST', body: fd });
       const data = await res.json();
-      if (!data.success) throw new Error(data.error);
+      if (!res.ok || !data.success) {
+        const errMsg = data.error || data.message || `HTTP ${res.status}`;
+        throw new Error(errMsg);
+      }
       currentEpisodeId = data.data.episodeId;
+      log('success', `Episode created! ID: ${currentEpisodeId}`);
       showPipeline(data.data.title, currentEpisodeId);
       startPolling();
-    } catch (err) { alert('Failed: ' + err.message); startBtn.disabled = false; document.getElementById('btnText').textContent = 'Start Pipeline'; }
+    } catch (err) {
+      log('error', `Episode creation failed: ${err.message}`);
+      startBtn.disabled = false;
+      document.getElementById('btnText').textContent = 'Start Pipeline';
+    }
   });
 
   function showPipeline(title, id) {
@@ -479,19 +554,21 @@
   async function deleteAndReset() {
     if (!currentEpisodeId) return resetUI();
     if (!confirm('Delete this episode and all its data? This cannot be undone.')) return;
+    log('info', `Deleting episode ${currentEpisodeId}...`);
     try {
       const res = await fetch(`/api/episodes/${currentEpisodeId}`, { method: 'DELETE' });
       const data = await res.json();
       if (!data.success) throw new Error(data.error);
+      log('success', 'Episode deleted.');
     } catch (err) {
-      alert('Delete failed: ' + err.message);
+      log('error', `Delete failed: ${err.message}`);
     }
     resetUI();
   }
 
   function resetUI() {
     if (pollInterval) clearInterval(pollInterval);
-    currentEpisodeId = null; selectedFile = null;
+    currentEpisodeId = null; selectedFile = null; lastStageStates = {};
     document.getElementById('uploadSection').style.display = 'block';
     document.getElementById('pipelineSection').classList.remove('active');
     document.getElementById('resultsSection').style.display = 'none';
@@ -506,19 +583,37 @@
     });
   }
 
-  function startPolling() { updateStatus(); pollInterval = setInterval(updateStatus, 3000); }
+  function startPolling() { updateStatus(); pollInterval = setInterval(updateStatus, 3000); log('info', 'Polling pipeline status every 3s...'); }
 
+  let lastStageStates = {};
   async function updateStatus() {
     if (!currentEpisodeId) return;
     try {
       const res = await fetch(`/api/episodes/${currentEpisodeId}/status`);
+      if (!res.ok) { log('warn', `Status poll failed: HTTP ${res.status}`); return; }
       const data = await res.json();
-      if (!data.success) return;
+      if (!data.success) { log('warn', `Status poll error: ${data.error || 'unknown'}`); return; }
       const { pipelineStatus, stages } = data.data;
       const b = document.getElementById('epStatus'); b.textContent = pipelineStatus; b.className = 'status-badge status-' + pipelineStatus;
-      Object.entries(stages).forEach(([n, i]) => updateStageCard(n, i));
-      if (['completed', 'partial', 'failed'].includes(pipelineStatus)) { clearInterval(pollInterval); await fetchFullEpisode(); }
-    } catch {}
+
+      // Log stage transitions
+      Object.entries(stages).forEach(([n, i]) => {
+        const prev = lastStageStates[n];
+        if (!prev || prev !== i.status) {
+          if (i.status === 'running') log('info', `Stage [${n}] started processing...`);
+          else if (i.status === 'completed') log('success', `Stage [${n}] completed.`);
+          else if (i.status === 'failed') log('error', `Stage [${n}] failed: ${i.error || 'unknown error'}`);
+          lastStageStates[n] = i.status;
+        }
+        updateStageCard(n, i);
+      });
+
+      if (pipelineStatus === 'completed') { log('success', 'Pipeline completed successfully!'); clearInterval(pollInterval); await fetchFullEpisode(); }
+      else if (pipelineStatus === 'failed') { log('error', 'Pipeline failed. Check stage errors above for details.'); clearInterval(pollInterval); await fetchFullEpisode(); }
+      else if (pipelineStatus === 'partial') { log('warn', 'Pipeline partially completed. Some stages failed.'); clearInterval(pollInterval); await fetchFullEpisode(); }
+    } catch (err) {
+      log('error', `Status poll network error: ${err.message}`);
+    }
   }
 
   function updateStageCard(name, info) {
@@ -534,16 +629,28 @@
   function timeAgo(d) { const s = Math.floor((Date.now() - new Date(d).getTime()) / 1000); if (s < 60) return s + 's ago'; if (s < 3600) return Math.floor(s/60) + 'm ago'; return Math.floor(s/3600) + 'h ago'; }
 
   async function retryStage(stage) {
-    try { const r = await fetch(`/api/episodes/${currentEpisodeId}/retry/${stage}`, { method: 'POST' }); const d = await r.json(); if (d.success) startPolling(); else alert('Retry failed: ' + d.error); } catch (e) { alert('Retry error: ' + e.message); }
+    log('info', `Retrying stage [${stage}]...`);
+    try {
+      const r = await fetch(`/api/episodes/${currentEpisodeId}/retry/${stage}`, { method: 'POST' });
+      const d = await r.json();
+      if (d.success) { log('success', `Retry queued for [${stage}].`); lastStageStates[stage] = ''; startPolling(); }
+      else { log('error', `Retry failed for [${stage}]: ${d.error}`); }
+    } catch (e) { log('error', `Retry network error: ${e.message}`); }
   }
 
   async function fetchFullEpisode() {
+    log('info', 'Fetching full episode data...');
     try {
-      const r = await fetch(`/api/episodes/${currentEpisodeId}`); const d = await r.json(); if (!d.success) return;
+      const r = await fetch(`/api/episodes/${currentEpisodeId}`);
+      if (!r.ok) { log('error', `Failed to fetch episode: HTTP ${r.status}`); return; }
+      const d = await r.json();
+      if (!d.success) { log('error', `Failed to fetch episode: ${d.error || 'unknown'}`); return; }
       const ep = d.data; document.getElementById('resultsSection').style.display = 'block';
       renderConcepts(ep.concepts || []); renderQuestions(ep.questions || []); renderFlashcards(ep.flashcards || []);
       renderScript(ep.scriptJson, ep.speaker1Name, ep.speaker2Name); renderAudio(ep.audioUrl);
-    } catch {}
+      log('success', `Loaded: ${ep.concepts?.length || 0} concepts, ${ep.questions?.length || 0} questions, ${ep.flashcards?.length || 0} flashcards`);
+      if (ep.audioUrl) log('success', 'Audio is ready for playback.');
+    } catch (err) { log('error', `Fetch episode error: ${err.message}`); }
   }
 
   function renderConcepts(c) {
